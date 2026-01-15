@@ -2,7 +2,20 @@ const express = require('express');
 const admin = require('firebase-admin');
 const cors = require('cors');
 
-const serviceAccount = require('./serviceAccountKey.json'); // ดาวน์โหลดจาก Firebase → Project Settings → Service Accounts
+// ดึงค่าจาก Environment Variables ของ Vercel
+const serviceAccount = {
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  // การจัดการ Private Key: ต้องแก้เรื่อง \n เพื่อให้ Vercel อ่านบรรทัดใหม่ได้ถูกต้อง
+  privateKey: process.env.FIREBASE_PRIVATE_KEY 
+    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
+    : undefined,
+};
+
+// ตรวจสอบว่าค่ามาครบไหม ถ้าไม่ครบให้แจ้งเตือน
+if (!serviceAccount.projectId || !serviceAccount.privateKey || !serviceAccount.clientEmail) {
+  console.error('Missing Firebase Credentials! Check Vercel Environment Variables.');
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -10,8 +23,13 @@ admin.initializeApp({
 });
 
 const app = express();
-app.use(cors({ origin: '*' })); // เปลี่ยนเป็น domain เว็บคุณ
+app.use(cors({ origin: '*' })); // ควรเปลี่ยน '*' เป็นโดเมนเว็บจริงของคุณเมื่อขึ้น Production
 app.use(express.json());
+
+// Route สำหรับเช็คสถานะ Server
+app.get('/', (req, res) => {
+  res.send('Notification Server is running on Vercel!');
+});
 
 app.post('/send-call-notification', async (req, res) => {
   const { doctorId, patientName = 'ผู้ป่วย' } = req.body;
@@ -19,7 +37,6 @@ app.post('/send-call-notification', async (req, res) => {
   if (!doctorId) return res.status(400).json({ error: 'ต้องระบุ doctorId' });
 
   try {
-    // ดึง FCM token จาก Firebase Realtime Database
     const db = admin.database();
     const doctorSnap = await db.ref(`doctors/${doctorId}`).once('value');
     const doctor = doctorSnap.val();
@@ -43,8 +60,8 @@ app.post('/send-call-notification', async (req, res) => {
     await admin.messaging().send(message);
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'ส่งแจ้งเตือนล้มเหลว' });
+    console.error('Error sending notification:', error);
+    res.status(500).json({ error: 'ส่งแจ้งเตือนล้มเหลว', details: error.message });
   }
 });
 
