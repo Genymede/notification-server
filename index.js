@@ -41,14 +41,22 @@ app.post('/send-call-notification', async (req, res) => {
     const doctorSnap = await db.ref(`doctors/${doctorId}`).once('value');
     const doctor = doctorSnap.val();
 
-    // แก้ตรงนี้: เช็ค expoPushToken แทน fcmToken
-    if (!doctor?.online || !doctor?.expoPushToken) {
-      return res.status(400).json({ error: 'แพทย์ไม่ออนไลน์หรือไม่มี token' });
+    console.log('Doctor data from Firebase:', doctor); // ← เพิ่ม log นี้เพื่อดูข้อมูลจริง
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'ไม่พบแพทย์' });
+    }
+
+    if (!doctor.online) {
+      return res.status(400).json({ error: 'แพทย์ไม่ออนไลน์' });
+    }
+
+    if (!doctor.expoPushToken) {
+      return res.status(400).json({ error: 'ไม่มี expoPushToken' });
     }
 
     const expoToken = doctor.expoPushToken;
 
-    // ส่งด้วย Expo Push API (แทน FCM)
     const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
@@ -66,6 +74,7 @@ app.post('/send-call-notification', async (req, res) => {
     });
 
     const expoResult = await expoResponse.json();
+    console.log('Expo push result:', expoResult); // ← log ผลลัพธ์
 
     if (expoResult.errors || expoResult.data?.status !== 'ok') {
       throw new Error(expoResult.errors?.[0]?.message || 'ส่งไม่สำเร็จ');
