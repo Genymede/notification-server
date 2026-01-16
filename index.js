@@ -51,7 +51,7 @@ app.post('/send-call-notification', async (req, res) => {
       return res.status(400).json({ error: 'แพทย์ไม่ออนไลน์' });
     }
 
-    if (!doctor.expoPushToken) {
+    if (!doctor.fcmToken) { // fcmToken แทน expoPushToken เพราะขี้เกียจเปลี่ยนชื่อใน Firebase
       return res.status(400).json({ error: 'ไม่มี expoPushToken' });
     }
 
