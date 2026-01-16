@@ -41,23 +41,36 @@ app.post('/send-call-notification', async (req, res) => {
     const doctorSnap = await db.ref(`doctors/${doctorId}`).once('value');
     const doctor = doctorSnap.val();
 
-    if (!doctor?.online || !doctor?.fcmToken) {
+    // แก้ตรงนี้: เช็ค expoPushToken แทน fcmToken
+    if (!doctor?.online || !doctor?.expoPushToken) {
       return res.status(400).json({ error: 'แพทย์ไม่ออนไลน์หรือไม่มี token' });
     }
 
-    const message = {
-      notification: {
+    const expoToken = doctor.expoPushToken;
+
+    // ส่งด้วย Expo Push API (แทน FCM)
+    const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: expoToken,
+        sound: 'default',
         title: 'มีคำขอปรึกษาใหม่!',
         body: `${patientName} ต้องการปรึกษาคุณด่วน`,
-      },
-      data: {
-        type: 'incoming_call',
-        doctorId,
-      },
-      token: doctor.fcmToken,
-    };
+        data: { type: 'incoming_call', doctorId },
+      }),
+    });
 
-    await admin.messaging().send(message);
+    const expoResult = await expoResponse.json();
+
+    if (expoResult.errors || expoResult.data?.status !== 'ok') {
+      throw new Error(expoResult.errors?.[0]?.message || 'ส่งไม่สำเร็จ');
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error sending notification:', error);
