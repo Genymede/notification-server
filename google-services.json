@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "420677292232",
+    "firebase_url": "https://medapp-f816a-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "medapp-f816a",
+    "storage_bucket": "medapp-f816a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420677292232:android:07499ab4f48732c41d95fd",
+        "android_client_info": {
+          "package_name": "com.kiosk.telemed"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtoeJESfxPWndYaQoIDY5vYfRE7Edkvp0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

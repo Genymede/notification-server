@@ -1,91 +1,101 @@
-const express = require('express');
-const admin = require('firebase-admin');
-const cors = require('cors');
-
-// ดึงค่าจาก Environment Variables ของ Vercel
-const serviceAccount = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  // การจัดการ Private Key: ต้องแก้เรื่อง \n เพื่อให้ Vercel อ่านบรรทัดใหม่ได้ถูกต้อง
-  privateKey: process.env.FIREBASE_PRIVATE_KEY 
-    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
-    : undefined,
-};
-
-// ตรวจสอบว่าค่ามาครบไหม ถ้าไม่ครบให้แจ้งเตือน
-if (!serviceAccount.projectId || !serviceAccount.privateKey || !serviceAccount.clientEmail) {
-  console.error('Missing Firebase Credentials! Check Vercel Environment Variables.');
-}
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://medapp-f816a-default-rtdb.asia-southeast1.firebasedatabase.app"
-});
+import express from 'express';
+import cors from 'cors';
+import fetch from 'node-fetch';
+import { GoogleAuth } from 'google-auth-library';
+//import fs from 'fs';
 
 const app = express();
-app.use(cors({ origin: '*' })); // ควรเปลี่ยน '*' เป็นโดเมนเว็บจริงของคุณเมื่อขึ้น Production
+app.use(cors());
 app.use(express.json());
 
-// Route สำหรับเช็คสถานะ Server
-app.get('/', (req, res) => {
-  res.send('Notification Server is running on Vercel!');
+// โหลด service account
+// const serviceAccount = JSON.parse(
+//   fs.readFileSync('./service-account.json', 'utf8')
+// );
+
+let serviceAccount;
+try {
+  if (process.env.SERVICE_ACCOUNT_JSON) {
+    serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
+  } else {
+    throw new Error('Missing SERVICE_ACCOUNT_JSON environment variable');
+  }
+} catch (error) {
+  console.error('Error parsing Service Account:', error);
+  // ให้ Server ทำงานต่อได้ แต่จะส่ง FCM ไม่ได้ (ดีกว่า Crash)
+}
+
+const PROJECT_ID = serviceAccount.project_id;
+
+const auth = new GoogleAuth({
+  credentials: serviceAccount,
+  scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
 });
 
-app.post('/send-call-notification', async (req, res) => {
-  const { doctorId, patientName = 'ผู้ป่วย' } = req.body;
+// health check
+app.get('/', (_, res) => {
+  res.send('FCM CALL SERVER RUNNING');
+});
 
-  if (!doctorId) return res.status(400).json({ error: 'ต้องระบุ doctorId' });
+app.post('/send-call', async (req, res) => {
+  const { fcmToken, patientName, roomId, requestId } = req.body;
+
+  if (!fcmToken) {
+    return res.status(400).json({ error: 'Missing fcmToken' });
+  }
 
   try {
-    const db = admin.database();
-    const doctorSnap = await db.ref(`doctors/${doctorId}`).once('value');
-    const doctor = doctorSnap.val();
+    const client = await auth.getClient();
+    const accessToken = await client.getAccessToken();
 
-    console.log('Doctor data from Firebase:', doctor); // ← เพิ่ม log นี้เพื่อดูข้อมูลจริง
-
-    if (!doctor) {
-      return res.status(404).json({ error: 'ไม่พบแพทย์' });
-    }
-
-    if (!doctor.online) {
-      return res.status(400).json({ error: 'แพทย์ไม่ออนไลน์' });
-    }
-
-    if (!doctor.fcmToken) { // fcmToken แทน expoPushToken เพราะขี้เกียจเปลี่ยนชื่อใน Firebase
-      return res.status(400).json({ error: 'ไม่มี expoPushToken' });
-    }
-
-    const expoToken = doctor.expoPushToken;
-
-    const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
+    const payload = {
+      message: {
+        token: fcmToken,
+        data: {
+          type: 'incoming_call',
+          title: '📞 มีสายเรียกเข้า',
+          body: `${patientName || 'ผู้ป่วย'} ต้องการปรึกษาคุณ`,
+          roomId: roomId || '',
+          requestId,
+          patientName: patientName || 'ผู้ป่วย',
+        },
+        android: {
+          priority: 'HIGH',
+          ttl: '60s',
+        },
       },
-      body: JSON.stringify({
-        to: expoToken,
-        sound: 'default',
-        title: 'มีคำขอปรึกษาใหม่!',
-        body: `${patientName} ต้องการปรึกษาคุณด่วน`,
-        data: { type: 'incoming_call', doctorId },
-      }),
-    });
+    };
 
-    const expoResult = await expoResponse.json();
-    console.log('Expo push result:', expoResult); // ← log ผลลัพธ์
+    const response = await fetch(
+      `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
 
-    if (expoResult.errors || expoResult.data?.status !== 'ok') {
-      throw new Error(expoResult.errors?.[0]?.message || 'ส่งไม่สำเร็จ');
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ FCM ERROR:', result);
+      return res.status(500).json(result);
     }
 
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error sending notification:', error);
-    res.status(500).json({ error: 'ส่งแจ้งเตือนล้มเหลว', details: error.message });
+    console.log('✅ FCM SENT:', result);
+    res.json(result);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// app.listen(3000, () => {
+//   console.log('🚀 Call notification server running on port 3000');
+// });
+
+export default app;
