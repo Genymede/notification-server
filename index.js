@@ -54,15 +54,21 @@ app.post('/send-call', async (req, res) => {
         data: {
           type: 'incoming_call',
           title: '📞 มีสายเรียกเข้า',
-          body: `${patientName || 'ผู้ป่วย'} ต้องการปรึกษาคุณ`,
+          body: `${patientName || 'ผู้ป่วย'} จาก ${origin || 'โรงพยาบาล'} ต้องการปรึกษาคุณ`,
           roomId: roomId || '',
           requestId,
           patientName: patientName || 'ผู้ป่วย',
-          origin: origin || 'unknown'
+          origin: origin || 'โรงพยาบาล'
         },
         android: {
           priority: 'HIGH',
           ttl: '60s',
+          notification: {
+            title: '📞 มีสายเรียกเข้า',
+            body: `${patientName || 'ผู้ป่วย'} จาก ${origin || 'โรงพยาบาล'} ต้องการปรึกษาคุณ`,
+            sound: 'default',
+            channel_id: 'default',
+          },
         },
       },
     };
