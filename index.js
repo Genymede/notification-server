@@ -38,7 +38,7 @@ app.get('/', (_, res) => {
 });
 
 app.post('/send-call', async (req, res) => {
-  const { fcmToken, patientName, roomId, requestId } = req.body;
+  const { fcmToken, patientName, roomId, requestId, origin } = req.body;
 
   if (!fcmToken) {
     return res.status(400).json({ error: 'Missing fcmToken' });
@@ -58,6 +58,7 @@ app.post('/send-call', async (req, res) => {
           roomId: roomId || '',
           requestId,
           patientName: patientName || 'ผู้ป่วย',
+          origin: origin || 'unknown'
         },
         android: {
           priority: 'HIGH',
