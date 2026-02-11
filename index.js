@@ -63,12 +63,6 @@ app.post('/send-call', async (req, res) => {
         android: {
           priority: 'HIGH',
           ttl: '60s',
-          notification: {
-            title: '📞 มีสายเรียกเข้า',
-            body: `${patientName || 'ผู้ป่วย'} จาก ${origin || 'โรงพยาบาล'} ต้องการปรึกษาคุณ`,
-            sound: 'default',
-            channel_id: 'default',
-          },
         },
       },
     };
